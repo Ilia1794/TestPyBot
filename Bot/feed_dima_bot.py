@@ -1,19 +1,14 @@
-# Dima_feeding_time
-# FeedDimaBot
-#
-# Done! Congratulations on your new bot. You will find it at t.me/FeedDimaBot. You can now add a description, about section and profile picture for your bot, see /help for a list of commands. By the way, when you've finished creating your cool bot, ping our Bot Support if you want a better username for it. Just make sure the bot is fully operational before you do this.
-#
-# Use this token to access the HTTP API:
-# 5777661926:AAHkGXN_McFo3L5bh2RmPBEiwQQkNvAJhSc
-# Keep your token secure and store it safely, it can be used by anyone to control your bot.
-#
-# For a description of the Bot API, see this page: https://core.telegram.org/bots/api
+"""
+Class of Bot for Dima feed
+"""
+from time import sleep
 import pandas as pd
 import telebot
-from Bot.resources.env_var import TOKEN
 from telebot import types
+from Bot.resources.env_var import TOKEN
 from Bot.resources.check_dimension import Dimension
 from Bot.resources.PlotStatistic import PlotStatistic
+
 
 
 class FeedDimaBot:
@@ -22,17 +17,24 @@ class FeedDimaBot:
         self.dem = Dimension()
         self.plot = PlotStatistic()
         self.btns = [
-            types.KeyboardButton('Help'),
+            types.KeyboardButton('Когда кормили?'),
             types.KeyboardButton('Статистика за день'),
             types.KeyboardButton('Статистика за неделю'),
             types.KeyboardButton('Статистика за месяц'),
             types.KeyboardButton('Статистика за всё время'),
+            # types.KeyboardButton('Когда кормили?'),
         ]
 
     def run(self):
         self.bot.message_handler(commands=['start'])(self.start)
+        self.bot.message_handler(commands=['help'])(self.add_help)
         self.bot.message_handler(content_types=['text'])(self.get_text_messages)
-        self.bot.polling(none_stop=True, interval=0)
+        while True:
+            try:
+                self.bot.polling(none_stop=True, interval=0)
+            except Exception as e:
+                print(f"Exception: {e}")
+                sleep(15)
 
     def start(self, message):
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -53,9 +55,9 @@ class FeedDimaBot:
         # elif message.text == 'Покушали':
         #     self.bot.send_message(message.from_user.id, 'Сколько мы скушали?', parse_mode='Markdown')
         elif message.text == 'Help':
-            with open('./Bot/resources/help.txt', 'r', encoding='utf-8') as f:
-                mess_help = f.read()
-            self.bot.send_message(message.chat.id, mess_help, parse_mode='Markdown')
+            mess_to_chat = self.last_feed()
+            self.bot.send_message(message.chat.id, mess_to_chat, parse_mode='Markdown')
+
 
         elif self.dem.check_food_dimensional(message.text.lower()):
             volume = self.parse_volume_liq(message)
@@ -63,22 +65,48 @@ class FeedDimaBot:
             self.bot.send_message(message.chat.id, mess_info, parse_mode='Markdown')
             self.__add_data(*volume)
 
-        elif message.text =='Статистика за день':
+        elif message.text == 'Статистика за день':
             self.plot.plot_day_statistic()
             self.send_fig("./Bot/resources/images/day_statistic.png", message)
 
-        elif message.text =='Статистика за неделю':
+        elif message.text == 'Статистика за неделю':
             self.plot.plot_week_statistic()
             self.send_fig("./Bot/resources/images/week_statistic.png", message)
 
-        elif message.text =='Статистика за месяц':
+        elif message.text == 'Статистика за месяц':
             self.plot.plot_month_statistic()
             self.send_fig("./Bot/resources/images/month_statistic.png", message)
 
-        elif message.text =='Статистика за всё время':
+        elif message.text == 'Статистика за всё время':
             self.plot.plot_all_statistic()
             self.send_fig("./Bot/resources/images/all_statistic.png", message)
 
+        elif message.text == 'Когда последний раз кормили?' or message.text == 'Когда кормили?':
+            # df = pd.read_parquet("./Bot/resources/food.val")
+            # df = df.query("value != 0")
+            # max_date = df['date'].values.max()
+            # tmp = df.query('date == @max_date')
+            # date, val = tmp['date'].values[0], tmp['value'].values[0]
+            # mess_to_chat = f"Диму последний раз кормили {pd.to_datetime(date).strftime('%H.%M')}, он скушал {val} мл"
+            mess_to_chat = self.last_feed()
+            self.bot.send_message(message.chat.id, mess_to_chat, parse_mode='Markdown')
+            # del tmp
+            # del df
+
+    def add_help(self, message):
+        with open('./Bot/resources/help.txt', 'r', encoding='utf-8') as f:
+            mess_help = f.read()
+        self.bot.send_message(message.chat.id, mess_help, parse_mode='Markdown')
+
+    def last_feed(self):
+        df = pd.read_parquet("./Bot/resources/food.val")
+        df = df.query("value != 0")
+        max_date = df['date'].values.max()
+        tmp = df.query('date == @max_date')
+        date, val = tmp['date'].values[0], tmp['value'].values[0]
+        del tmp
+        del df
+        return f"Диму последний раз кормили {pd.to_datetime(date).strftime('%H.%M')}, он скушал {val} мл"
 
     def send_fig(self, path, message):
         photo = open(path, 'rb')
@@ -153,6 +181,7 @@ class FeedDimaBot:
         try:
             df = pd.read_parquet(f"./Bot/resources/{type_data}.val")
             ret_df = pd.concat([df, df_write], ignore_index=False)
+            ret_df = ret_df.query('value > 0.0001')
             ret_df.to_parquet(f"./Bot/resources/{type_data}.val")
         except FileNotFoundError:
             df_write.to_parquet(f"./Bot/resources/{type_data}.val")

@@ -32,16 +32,20 @@ class PlotStatistic:
         self.__save_fig(fig, "all_statistic.png")
 
     def __group_by_days(self, days: int = 0):
+        df = pd.read_parquet(self.addr)
+        df = df.query("value != 0")
         if days > 0:
             begin_date = pd.Timestamp.now() - pd.DateOffset(days=days)
-            df = pd.read_parquet(self.addr).query('date >= @begin_date')
+            df = df.query('date >= @begin_date')
             df['just_date'] = df["date"].values.astype(dtype='datetime64[D]')
             ddf = df.groupby('just_date')['value'].sum()
             ddf = ddf.reset_index()
             ddf.rename(columns={"just_date": "date"}, inplace=True)
             return ddf
         else:
-            return pd.read_parquet(self.addr)
+            begin_date = pd.Timestamp.now() - pd.DateOffset(hours=24)
+            df = df.query('date >= @begin_date')
+            return df
 
     @staticmethod
     def __create_fig(df: pd.DataFrame, name):

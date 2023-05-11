@@ -1,5 +1,5 @@
 
-from Bot.FeedDimaBot import FeedDimaBot
+from Bot.feed_dima_bot import FeedDimaBot
 from threading import Thread
 
 
